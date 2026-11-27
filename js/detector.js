@@ -1,44 +1,59 @@
 /*
- * 画像から「行」と「文字」を検出する
- * detectChars(RGBAピクセル, 幅, 高さ) → { W, H, lines, all }
- *   lines: [{ y0, y1, chars: [文字...] }]
- *   文字:  { x0, x1, y0, y1, w, h, cx, cy, size, stroke, bx, by, minor, dev }
+ * 写真から「1文字」を切り出す
+ * extractChar(RGBAピクセル, 幅, 高さ) →
+ *   { x0, y0, w, h, mask, multiple }
+ *   mask: w×h の 0/1 配列（1 = インク）
+ *   multiple: ほかにも文字らしきものが写っていたら true
  */
-function detectChars(px, W, H) {
+function extractChar(px, W, H) {
   const D = CONFIG.detect;
   const ink = binarize(px, W, H, D);
-  removeNoise(ink, W, H, D);
+  const { lab, comps } = labelComponents(ink, W, H);
 
-  // --- 行の検出（水平方向のインク量） ---
-  const hp = new Uint32Array(H);
-  for (let y = 0; y < H; y++) { let s = 0; for (let x = 0; x < W; x++) s += ink[y * W + x]; hp[y] = s; }
-  let segs = runs(hp);
-  if (!segs.length) throw new Error(CONFIG.text.noChars);
-  segs = mergeSegs(segs, median(segs.map(segLen)) * D.lineMergeGap);
-  const lineH = median(segs.map(segLen));
-  segs = segs.filter(s => segLen(s) > lineH * D.minLineHeight);
-
-  // --- 各行の中で文字を切り出す（垂直方向のインク量） ---
-  const lines = [];
-  for (const [ly0, ly1] of segs) {
-    const lh = ly1 - ly0 + 1;
-    const vp = new Uint32Array(W);
-    for (let y = ly0; y <= ly1; y++) for (let x = 0; x < W; x++) vp[x] += ink[y * W + x];
-    let cs = mergeSegs(runs(vp), lh * D.charMergeGap);
-    cs = mergeNarrow(cs, lh, D);
-    const chars = cs.map(([x0, x1]) => charStats(ink, W, x0, x1, ly0, ly1)).filter(Boolean);
-    if (chars.length) lines.push({ y0: ly0, y1: ly1, chars });
-  }
-  const all = lines.flatMap(l => l.chars);
-  if (all.length < 2) throw new Error(CONFIG.text.tooFew);
-
-  // 句読点など極端に小さい文字は採点対象外にする
-  const medSize = median(all.map(c => c.size));
-  all.forEach(c => {
-    c.minor = c.size < medSize * D.minorSize;
-    c.dev = Math.abs(c.size - medSize) / medSize;
+  // ゴミ・罫線・紙の端を除く
+  const minArea = Math.max(8, W * H * D.minAreaRatio);
+  const cand = comps.filter(c => {
+    const w = c.maxx - c.minx + 1, h = c.maxy - c.miny + 1;
+    const border = c.minx <= 1 || c.miny <= 1 || c.maxx >= W - 2 || c.maxy >= H - 2;
+    if (c.area < minArea) return false;                       // ゴミ
+    if (border && (w > W * .25 || h > H * .25)) return false; // 紙の端・影
+    if (w > W * .85 && h < H * .05) return false;             // 横罫線
+    if (h > H * .85 && w < W * .05) return false;             // 縦罫線
+    return true;
   });
-  return { W, H, lines, all, medSize };
+  if (!cand.length) throw new Error(CONFIG.text.noChars);
+
+  // いちばん大きい部品から始めて、近くにある部品（濁点・へん等）を足していく
+  cand.sort((a, b) => b.area - a.area);
+  const sel = new Uint8Array(comps.length + 1);
+  const u = { x0: cand[0].minx, y0: cand[0].miny, x1: cand[0].maxx, y1: cand[0].maxy };
+  sel[cand[0].id] = 1;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const c of cand) {
+      if (sel[c.id]) continue;
+      const size = Math.max(u.x1 - u.x0, u.y1 - u.y0) + 1;
+      const dx = Math.max(0, u.x0 - c.maxx, c.minx - u.x1);
+      const dy = Math.max(0, u.y0 - c.maxy, c.miny - u.y1);
+      if (Math.max(dx, dy) <= size * D.joinDistance) {
+        sel[c.id] = 1; changed = true;
+        u.x0 = Math.min(u.x0, c.minx); u.y0 = Math.min(u.y0, c.miny);
+        u.x1 = Math.max(u.x1, c.maxx); u.y1 = Math.max(u.y1, c.maxy);
+      }
+    }
+  }
+  const w = u.x1 - u.x0 + 1, h = u.y1 - u.y0 + 1;
+  if (Math.max(w, h) < D.minCharPixels) throw new Error(CONFIG.text.tooSmall);
+
+  const selArea = cand.filter(c => sel[c.id]).reduce((s, c) => s + c.area, 0);
+  const multiple = cand.some(c => !sel[c.id] && c.area > selArea * D.otherCharRatio);
+
+  const mask = new Uint8Array(w * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const l = lab[(y + u.y0) * W + x + u.x0];
+    if (l && sel[l]) mask[y * w + x] = 1;
+  }
+  return { x0: u.x0, y0: u.y0, w, h, mask, multiple };
 }
 
 /* 適応的二値化：周囲より暗い画素をインクとみなす（影・照明ムラに強い） */
@@ -68,13 +83,13 @@ function binarize(px, W, H, D) {
   return ink;
 }
 
-/* 連結成分ごとに見て、ゴミ・罫線・紙の端を消す（ink を書き換える） */
-function removeNoise(ink, W, H, D) {
+/* つながっているインクごとに番号を振る */
+function labelComponents(ink, W, H) {
   const N = W * H, lab = new Int32Array(N), comps = [], stack = new Int32Array(N);
   for (let i = 0; i < N; i++) {
     if (!ink[i] || lab[i]) continue;
     const id = comps.length + 1; let sp = 0; stack[sp++] = i; lab[i] = id;
-    const c = { minx: W, miny: H, maxx: 0, maxy: 0, area: 0 };
+    const c = { id, minx: W, miny: H, maxx: 0, maxy: 0, area: 0 };
     while (sp) {
       const p = stack[--sp], x = p % W, y = (p / W) | 0;
       c.area++;
@@ -89,79 +104,5 @@ function removeNoise(ink, W, H, D) {
     }
     comps.push(c);
   }
-  const minArea = Math.max(8, N * D.minAreaRatio);
-  const keep = new Uint8Array(comps.length + 1);
-  comps.forEach((c, k) => {
-    const w = c.maxx - c.minx + 1, h = c.maxy - c.miny + 1;
-    const border = c.minx <= 1 || c.miny <= 1 || c.maxx >= W - 2 || c.maxy >= H - 2;
-    if (c.area < minArea) return;                          // ゴミ
-    if (border && (w > W * .25 || h > H * .25)) return;   // 紙の端・影
-    if (w > W * .55 && h < H * .04) return;                // 横罫線
-    if (h > H * .55 && w < W * .04) return;                // 縦罫線
-    if (w > W * .8 || h > H * .8) return;                  // 大きすぎる物体
-    keep[k + 1] = 1;
-  });
-  for (let i = 0; i < N; i++) if (lab[i] && !keep[lab[i]]) ink[i] = 0;
-}
-
-/* 0 でない区間を [開始, 終了] の配列で返す */
-function runs(arr) {
-  const out = [];
-  for (let i = 0, st = -1; i <= arr.length; i++) {
-    const on = i < arr.length && arr[i] > 0;
-    if (on && st < 0) st = i;
-    if (!on && st >= 0) { out.push([st, i - 1]); st = -1; }
-  }
-  return out;
-}
-const segLen = s => s[1] - s[0] + 1;
-
-function mergeSegs(segs, gap) {
-  const out = [];
-  for (const s of segs) {
-    const last = out[out.length - 1];
-    if (last && s[0] - last[1] - 1 <= gap) last[1] = s[1]; else out.push([...s]);
-  }
-  return out;
-}
-
-/* 偏とつくりなど、横に分かれた部品を1文字にまとめる */
-function mergeNarrow(segs, lh, D) {
-  let cs = segs.map(s => ({ x0: s[0], x1: s[1], fixed: false }));
-  const wid = s => s.x1 - s.x0 + 1;
-  while (cs.length > 1) {
-    let bi = -1;
-    cs.forEach((s, i) => { if (!s.fixed && wid(s) < lh * D.narrowPart && (bi < 0 || wid(s) < wid(cs[bi]))) bi = i; });
-    if (bi < 0) break;
-    const opts = [];
-    if (bi > 0) opts.push({ a: bi - 1, w: cs[bi].x1 - cs[bi - 1].x0 + 1, gap: cs[bi].x0 - cs[bi - 1].x1 });
-    if (bi < cs.length - 1) opts.push({ a: bi, w: cs[bi + 1].x1 - cs[bi].x0 + 1, gap: cs[bi + 1].x0 - cs[bi].x1 });
-    const o = opts.filter(o => o.w <= lh * D.maxCharWidth).sort((p, q) => p.gap - q.gap)[0];
-    if (!o) { cs[bi].fixed = true; continue; }
-    cs.splice(o.a, 2, { x0: cs[o.a].x0, x1: cs[o.a + 1].x1, fixed: false });
-  }
-  return cs.map(s => [s.x0, s.x1]);
-}
-
-/* 1文字分の範囲から各種の値を測る */
-function charStats(ink, W, x0, x1, y0, y1) {
-  let ty0 = Infinity, ty1 = -1, n = 0, sx = 0, sy = 0;
-  const strokeRuns = [];
-  for (let y = y0; y <= y1; y++) {
-    let run = 0;
-    for (let x = x0; x <= x1 + 1; x++) {
-      const v = x <= x1 && ink[y * W + x];
-      if (v) { n++; sx += x; sy += y; run++; if (y < ty0) ty0 = y; if (y > ty1) ty1 = y; }
-      else if (run) { strokeRuns.push(run); run = 0; }
-    }
-  }
-  if (!n) return null;
-  const w = x1 - x0 + 1, h = ty1 - ty0 + 1, size = Math.max(w, h);
-  const cx = (x0 + x1) / 2, cy = (ty0 + ty1) / 2;
-  return {
-    x0, x1, y0: ty0, y1: ty1, w, h, cx, cy, n, size,
-    stroke: median(strokeRuns),   // 線の太さの目安
-    bx: (sx / n - cx) / size,     // 重心の横ずれ
-    by: (sy / n - cy) / size,     // 重心の縦ずれ
-  };
+  return { lab, comps };
 }

@@ -13,23 +13,28 @@
     <p id="lead"></p>
   </header>
 
-  <!-- アップロード -->
+  <!-- 入力 -->
   <section class="card">
+    <div class="step"><span class="no">1</span>書いた文字を入力</div>
+    <input id="target" type="text" maxlength="2" placeholder="例：わ" autocomplete="off" aria-label="書いた文字（1文字）">
+
+    <div class="step"><span class="no">2</span>その文字の写真をアップロード</div>
     <div id="drop" tabindex="0">
       <strong>📷 写真をドロップ / クリックして選択</strong>
       <small>スマホならその場で撮影もできます（JPG・PNG など）</small>
     </div>
     <input id="file" type="file" accept="image/*" hidden>
+
     <div class="row">
       <span class="label">サンプルで試す：</span>
-      <button id="s1">整った文字</button>
-      <button id="s2">ばらばらな文字</button>
+      <span id="samples" class="row-inner"></span>
     </div>
     <ul class="tips">
-      <li>白い紙に<b>横書き</b>で書いた文字がおすすめです（縦書きは未対応）</li>
-      <li>文字の部分だけが写るように、真上から明るい場所で撮影してください</li>
+      <li><b>1文字だけ</b>を大きく書いて撮影してください（複数写っている場合はいちばん大きい字を採点）</li>
+      <li>白い紙に書き、真上から明るい場所で、紙のふちが写らないように撮ると正確です</li>
       <li>写真はブラウザ内だけで処理され、どこにも送信されません</li>
     </ul>
+    <div id="busy">解析中…</div>
     <div id="err"></div>
   </section>
 
@@ -49,25 +54,30 @@
         <p id="summary"></p>
       </div>
     </div>
+
+    <div id="reading" class="reading"></div>
     <div class="metrics" id="metrics"></div>
     <div class="advice" id="advice"></div>
-    <h3 class="view-title">解析結果</h3>
-    <canvas id="view"></canvas>
-    <div class="legend">
-      <span style="--c:var(--good)">大きさが揃っている文字</span>
-      <span style="--c:var(--mid)">少しずれている文字</span>
-      <span style="--c:var(--bad)">大きく外れている文字</span>
-      <span style="--c:var(--accent2)">行の傾き</span>
+
+    <h3 class="view-title">お手本と見比べ</h3>
+    <div class="compare">
+      <figure><canvas id="cvUser"></canvas><figcaption>あなたの字</figcaption></figure>
+      <figure><canvas id="cvModel"></canvas><figcaption>お手本</figcaption></figure>
+      <figure><canvas id="cvOverlay"></canvas><figcaption><span class="dot red"></span>あなた <span class="dot blue"></span>お手本</figcaption></figure>
     </div>
+
+    <h3 class="view-title">写真のどこを見たか</h3>
+    <canvas id="view"></canvas>
   </section>
 
-  <footer>※ 画像解析による目安の点数です。文字の大きさ・行のまっすぐさ・間隔・線の太さ・バランスから自動で採点しています。</footer>
+  <footer>※ 画像解析による目安の点数です。お手本はパソコンのフォントで作っています。「見間違い」はひらがな・カタカナ・小1の漢字などとの比較です。</footer>
 </main>
 
-<!-- 読み込み順を変えないでください（config → utils → 解析 → 採点 → 画面） -->
+<!-- 読み込み順を変えないでください（設定 → 共通 → 切り出し → 形の比較 → 採点 → サンプル → 画面） -->
 <script src="js/config.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/detector.js"></script>
+<script src="js/shape.js"></script>
 <script src="js/metrics.js"></script>
 <script src="js/sample.js"></script>
 <script src="js/app.js"></script>

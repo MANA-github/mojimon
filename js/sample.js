@@ -1,26 +1,29 @@
 /*
  * 動作確認用のサンプル画像を作る
- * messy = true でわざと大きさ・位置・角度をばらつかせる
+ * 各サンプル: { label: ボタン名, target: 入力欄に入れる文字, draw: 実際に描く文字, wave: ゆがみの強さ }
  */
-const SAMPLE_LINES = ['きれいな文字を', '書きましょう'];
+const SAMPLES = [
+  { label: 'きれいな「わ」',        target: 'わ', draw: 'わ', wave: 0 },
+  { label: 'くずれた「わ」',        target: 'わ', draw: 'わ', wave: 14 },
+  { label: '「れ」に見える「わ」',  target: 'わ', draw: 'れ', wave: 4 },
+];
 
-function makeSample(messy) {
-  const c = document.createElement('canvas'); c.width = 1100; c.height = 420;
+function makeSample({ draw, wave }) {
+  const S = 480, c = document.createElement('canvas'); c.width = c.height = S;
   const g = c.getContext('2d');
-  g.fillStyle = '#fbfaf6'; g.fillRect(0, 0, c.width, c.height);
-  g.fillStyle = '#222'; g.textBaseline = 'middle';
-  let seed = 7;
-  const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280 - .5;   // 毎回同じ乱数
-  SAMPLE_LINES.forEach((t, li) => {
-    let x = 80;
-    [...t].forEach(ch => {
-      const s = messy ? 86 * (1 + rnd() * .7) : 86;
-      const y = 120 + li * 170 + (messy ? rnd() * 60 + x * .04 : 0);
-      g.save(); g.translate(x, y); if (messy) g.rotate(rnd() * .5);
-      g.font = `${messy && rnd() > 0 ? 700 : 500} ${s}px "Yu Mincho","Hiragino Mincho ProN",serif`;
-      g.fillText(ch, 0, 0); g.restore();
-      x += messy ? s * (1.05 + rnd() * .9) : 100;
-    });
-  });
+  g.fillStyle = '#fbfaf6'; g.fillRect(0, 0, S, S);
+
+  // いったん別キャンバスに文字を描く
+  const t = document.createElement('canvas'); t.width = t.height = S;
+  const tg = t.getContext('2d');
+  tg.fillStyle = '#222'; tg.textAlign = 'center'; tg.textBaseline = 'middle';
+  tg.font = '600 300px "Meiryo", "Hiragino Maru Gothic ProN", sans-serif';
+  tg.translate(S / 2, S / 2); tg.rotate(0.05); tg.fillText(draw, 0, 0);
+
+  // 行ごとに左右へずらして手書きっぽいゆがみを付ける
+  for (let y = 0; y < S; y += 2) {
+    const dx = wave * Math.sin(y / 38) + wave * .6 * Math.sin(y / 13);
+    g.drawImage(t, 0, y, S, 2, dx, y, S, 2);
+  }
   return c;
 }
