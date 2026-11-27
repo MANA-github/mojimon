@@ -1,0 +1,70 @@
+/* ===== 色（ライト） ===== */
+:root{
+  --bg:#f6f4ef; --card:#ffffff; --ink:#1f2328; --sub:#5f6670; --line:#e3e0d8;
+  --accent:#d9534f; --accent2:#2f6fde; --good:#2e9d5b; --mid:#d99a1e; --bad:#d9534f;
+  --track:#ece9e2;
+}
+/* ===== 色（ダーク） ===== */
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#16181c; --card:#20242a; --ink:#eceff3; --sub:#a3aab5; --line:#323842; --track:#2c3139;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#16181c; --card:#20242a; --ink:#eceff3; --sub:#a3aab5; --line:#323842; --track:#2c3139;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font-family:"Hiragino Sans","Yu Gothic UI","Meiryo",system-ui,sans-serif;line-height:1.6}
+main{max-width:880px;margin:0 auto;padding:24px 16px 64px}
+
+/* ヘッダー */
+header h1{margin:0;font-size:28px;letter-spacing:.04em}
+header h1 span{color:var(--accent)}
+header p{margin:4px 0 0;color:var(--sub);font-size:14px}
+
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:20px;margin-top:20px}
+
+/* アップロード欄 */
+#drop{border:2px dashed var(--line);border-radius:12px;padding:36px 16px;text-align:center;cursor:pointer;transition:.15s}
+#drop.over,#drop:hover{border-color:var(--accent2);background:color-mix(in srgb,var(--accent2) 6%,transparent)}
+#drop strong{display:block;font-size:18px;margin-bottom:4px}
+#drop small{color:var(--sub)}
+.row{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px;align-items:center}
+.row .label{color:var(--sub);font-size:13px}
+button{font:inherit;border:1px solid var(--line);background:var(--card);color:var(--ink);
+  padding:8px 14px;border-radius:999px;cursor:pointer}
+button:hover{border-color:var(--accent2)}
+.tips{color:var(--sub);font-size:13px;margin:12px 0 0;padding-left:18px}
+#err{display:none;color:var(--bad);margin-top:12px;font-weight:600}
+
+/* 結果 */
+#result{display:none}
+.top{display:flex;gap:24px;align-items:center;flex-wrap:wrap}
+.ring{position:relative;width:170px;height:170px;flex:none}
+.ring svg{transform:rotate(-90deg)}
+.ring .num{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+.ring .num b{font-size:52px;line-height:1}
+.ring .num span{font-size:13px;color:var(--sub)}
+#arc{transition:stroke-dashoffset 1s ease}
+.verdict{flex:1;min-width:220px}
+.rank{display:inline-block;font-weight:700;font-size:22px;padding:2px 14px;border-radius:8px;color:#fff}
+.verdict h2{margin:8px 0 4px;font-size:22px}
+.verdict p{margin:0;color:var(--sub)}
+
+.metrics{margin-top:20px;display:grid;gap:12px}
+.m .lab{display:flex;justify-content:space-between;font-size:14px}
+.m .lab em{font-style:normal;color:var(--sub);font-size:12px;margin-left:6px}
+.bar{height:10px;background:var(--track);border-radius:99px;overflow:hidden;margin-top:4px}
+.bar i{display:block;height:100%;border-radius:99px;width:0;transition:width .8s ease}
+
+.advice{margin-top:18px;padding:14px 16px;border-radius:10px;background:color-mix(in srgb,var(--accent2) 8%,transparent);font-size:14px}
+.advice ul{margin:6px 0 0;padding-left:18px}
+
+.view-title{margin:22px 0 0;font-size:16px}
+#view{width:100%;height:auto;border-radius:10px;border:1px solid var(--line);margin-top:10px;background:#fff}
+.legend{font-size:12px;color:var(--sub);display:flex;gap:14px;flex-wrap:wrap;margin-top:6px}
+.legend span::before{content:"";display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px;background:var(--c)}
+
+footer{color:var(--sub);font-size:12px;margin-top:24px;text-align:center}
